@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Game</title>
+        <script src="../jquery-1.11.3.min.js"></script>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+        <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+        <script type="text/javascript" src="phaser_js/phaser.min.js"></script>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.2/modernizr.js"></script>
+        <link rel="stylesheet" type="text/css" href="style.css">
+        
+        
+    </head>
+
+        <h1>Game</h1>
+         
+        <script>
+            var clicked = false;
+            var game = new Phaser.Game(720, 480, Phaser.AUTO, '', {preload: preload, create: create, update: update});
+            var player;
+            var playerGravity = 800;
+            var jumpPower;
+            var score = 0;
+            var leaderboard;
+            var scoreText;
+            var restart;
+            var bestScore;
+            var powerBar;
+            var powerTween;
+            var placedPoles = 0;
+            var poleGroup;
+            var min_gap = 100;
+            var max_gap = 300;
+            var playerJumping;
+            var playerFallingDown;
+            
+            function preload(){
+                game.load.image("player", "penguin.png");
+                game.load.image("pole", "platform_pole.png");
+                game.load.image("powerbar", "powerBar.png");
+                game.load.image("background", "BG.png");
+                game.load.image("restart", "restart.png");
+            }
+            function create(){
+                game.add.tileSprite(0,0, 720, 480, "background");
+                playerJumping = false;
+                playerFallingDown = false;
+                poleGroup = game.add.group();
+                scoreText = game.add.text(10,10,"-",{font:"bold 16px Arial"});
+                updateScore();
+                game.physics.startSystem(Phaser.Physics.ARCADE);
+                player = game.add.sprite(160, 0, "player");
+                player.scale.x = 0.7;
+                player.scale.y = 0.7;
+                player.anchor.set(0.5);
+                player.lastPole = 1;
+                game.physics.arcade.enable(player);
+                player.body.gravity.y = playerGravity;
+               // player.animations.add("jump", [0,1,2,3,4,5,6], 10, true);
+                game.input.onDown.add(prepareToJump, this);
+                addPole(160);
+            }
+            function update(){
+                game.physics.arcade.collide(player, poleGroup, checkLanding);
+                if(player.y>game.height){
+                    endGame();
+                }
+            }
+            
+            function updateScore(){
+                scoreText.text = "Score: "+score;
+            }
+            function prepareToJump(){
+                if(player.body.velocity.y==0){
+                    powerBar = game.add.sprite(player.x, player.y-50, "powerbar");
+                    powerBar.width = 0;
+                    powerTween = game.add.tween(powerBar).to({
+                        width: 100},
+                        1000, "Linear", true);
+                        game.input.onDown.remove(prepareToJump, this);
+                        game.input.onUp.add(jump, this);
+                    }
+                }
+            function jump(){
+               // player.animations.play("jump");
+                jumpPower = -powerBar.width*3-100;
+                powerBar.destroy();
+                game.tweens.removeAll();
+                player.body.velocity.y = jumpPower*2;
+                playerJumping = true;
+                powerTween.stop();
+                game.input.onUp.remove(jump, this);
+            }
+            function Pole(game, x, y){
+                Phaser.Sprite.call(this, game, x, y, "pole");
+                game.physics.enable(this, Phaser.Physics.ARCADE);
+                this.body.immovable = true;
+                this.poleNumber = placedPoles;
+            };
+            
+            Pole.prototype = Object.create(Phaser.Sprite.prototype);
+            Pole.prototype.constructor = Pole;
+            Pole.prototype.update = function() {
+                if(playerJumping && !playerFallingDown){
+                    this.body.velocity.x = jumpPower;
+                }
+                else{
+                    this.body.velocity.x = 0;
+                }
+                if(this.x<-this.width){
+                    this.destroy();
+                    addNewPoles();
+                }
+            }
+            function addNewPoles(){
+                var maxPolex = 0;
+                poleGroup.forEach(function(item){
+                    maxPolex = Math.max(item.x, maxPolex)
+                });
+                var nextPolePosition = maxPolex + game.rnd.between(min_gap, max_gap);
+                addPole(nextPolePosition);
+            }
+            function addPole(x_position){
+                if (x_position<game.width*2){
+                    placedPoles++;
+                    var pole = new Pole(game, x_position, game.rnd.between(250, 380));
+                    //game.add.existing(pole);
+                    pole.anchor.set(0.5, 0);
+                    poleGroup.add(pole);
+                    var nextPolePosition = x_position + game.rnd.between(min_gap, max_gap);
+                    addPole(nextPolePosition);
+                }
+            }
+
+            function checkLanding(n, p){
+                if(n.body.touching.down){ 
+                    var border = n.x-p.x;
+                    if(Math.abs(border)>80){
+                        //n.body.velocity.x=border*2;
+                        n.body.velocity.y=-200;
+                    }
+                    var poleDiff = p.poleNumber-n.lastPole;
+                    if(poleDiff>0){
+                        score+= Math.pow(1, poleDiff);
+                        updateScore();
+                        n.lastPole=p.poleNumber;
+                    }
+                    if (playerJumping){
+                        playerJumping = false;
+                        game.input.onDown.add(prepareToJump, this);
+                    }
+                }
+                else {
+                    playerFallingDown = true;
+                    poleGroup.forEach(function(item){
+                        //item.body.velocity.x = 0;
+                    });
+                }
+            }
+            
+            
+            function restartGame(){
+                score = 0;
+                game.state.start(game.state.current);
+            } 
+
+            function endGame() {
+                restart = game.add.button(270, 50, 'restart', restartGame, this);
+                restart.scale.y = 0.25;
+                restart.scale.x = 0.25;
+                var gameOver = game.add.text(275,60, "Game Over!");
+                var gameOverScore = game.add.text(240,80, "Your score was: " + score);
+                //die();
+            }
+
+
+     
+            function getUsername() {
+                  $.getJSON("users.php", function(data) {
+                    //   username = "<ul>"
+                    data.forEach(function(entry) {
+                        username =  entry.username;
+                    });
+                    // username += "</ul>";
+                    document.getElementById("users").innerHTML = username;
+                  });
+                }
+
+            function die(){
+                
+                var request = $.ajax({
+                    url: "addScore.php",
+                    type: "POST",
+                    data: {
+                        "username": username,
+                        "score": score
+                    },
+                    dataType: "html"
+                });
+                request.done(function(msg){
+                    loadScore();
+                });
+                // request.fail(function(jqXHR, textStatus){
+                //     alert(textStatus);
+                // });
+            }
+            function loadScore() {
+              $.getJSON("getScore.php", function(data) {
+                var text="<ul>";
+                data.forEach(function(entry) {
+                  text += "<li>" + entry.username + ": " + entry.score + "</li>";
+                });
+                text += "</ul>"
+                document.getElementById("users").innerHTML = text;
+              });
+            }
+            
+
+            $(document).ready(function() {
+              $('#add_score').click(function() {
+                if(clicked == false){
+                  clicked = true;
+                  var username = $("#username").val();
+                  var post_score = score;
+                  $.ajax({
+                    type: "POST",
+                    url: "addScore.php",
+                    data: {
+                      "username": username,
+                      "score": post_score
+                    },
+                    dataType: "html"
+                });
+                }
+                request.done(function(msg){
+                    loadScore();
+                });
+              });
+            });
+            
+             function loadScores() {
+              $.getJSON("getScores.php", function(data) {
+                var text="<ol>";
+                data.forEach(function(entry) {
+                 text += "<li>" + entry.username + "   " + entry.score + "</li>";
+                });
+                text += "</ol>";
+                document.getElementById("scores").innerHTML = text;
+              });
+             }
+           
+      </script>
+
+    <body>
+        <div id="scores"></div>
+        <div class="input-group">
+          <span class="input-group-addon" id="basic-addon1">View Leaderboards!</span>
+          <input type="text" class="form-control" placeholder="Username" aria-describedby="basic-addon1">
+        </div>
+        </div>
+    </body>
+    
+</html>

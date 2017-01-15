@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Game</title>
+        <script src="../jquery-1.11.3.min.js"></script>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+        <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+        <script type="text/javascript" src="phaser_js/phaser.min.js"></script>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js"></script>
+        <script src="http://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.2/modernizr.js"></script>
+        
+        
+    </head>
+        
+        <div id="game"> 
+        <script>
+    
+            var w = window.innerWidth; // check the width of the screen that is been used
+            var screenSize = w / 2; // Set game width accordingly
+            var game = new Phaser.Game(screenSize, 480, Phaser.AUTO, '', {preload: preload, create: create, update: update});
+            var player;
+            var jumpForce;
+            var score = 0;
+            var leaderboard;
+            var scoreText;
+            var restart;
+            var bestScore;
+            var powerbar;
+            var powerbarIncrease;
+            var placedPoles = 0;
+            var poleGroup;
+            var min_gap = 100;
+            var max_gap = 300;
+            var playerJumping;
+            var playerFallingDown;
+            var bg_music;
+            
+            function preload(){
+                
+                game.load.audio('bg_music', 'assets/ignorant_bliss.m4a');
+                game.load.image("player", "assets/penguin.png");
+                game.load.image("pole", "assets/platform_pole.png");
+                game.load.image("powerbar", "assets/powerBar.png");
+                game.load.image("background", "assets/BG.png");
+                game.load.image("restart", "assets/restart.png");
+            }
+            function create(){
+                
+                game.physics.startSystem(Phaser.Physics.ARCADE);
+                game.add.tileSprite(0,0, screenSize, 480, "background");
+                
+                // set background music
+                bg_music = game.add.audio('bg_music');
+                bg_music.volume = 0.1;
+                bg_music.loop = true;
+                bg_music.play();
+                bg_music.onLoop.add(playMusic,this);
+                
+                playerJumping = false;
+                playerFallingDown = false;
+                
+                poleGroup = game.add.group();
+                
+                scoreText = game.add.text(10,10,"-",{font:"21px Arial"});
+                updateScore();
+                
+                player = game.add.sprite(160, 0, "player");
+                player.scale.x = 0.7;
+                player.scale.y = 0.7;
+                player.anchor.set(0.5);
+                player.lastPole = 1;
+                game.physics.arcade.enable(player);
+                player.body.gravity.y = 1000;
+                
+               // player.animations.add("jump", [0,1,2,3,4,5,6], 10, true);
+                game.input.onDown.add(getJumpForce, this);
+                addPole(160);
+            }
+            function update(){
+                bg_music.onLoop.add(playMusic,this);
+                game.physics.arcade.collide(player, poleGroup, checkLanding);
+                
+                // check if user has dieded
+                if(player.y > game.height){
+                    endGame();
+                }
+            }
+            
+            Pole.prototype = Object.create(Phaser.Sprite.prototype);
+           // Pole.prototype.constructor = Pole;
+            Pole.prototype.update = function() {
+                if(playerJumping && !playerFallingDown){
+                    // if the penguin is in the air, the poles will have the same speed of its jumpForce (but in the opposite direction)
+                    this.body.velocity.x = jumpForce;
+                }
+                else{
+                    this.body.velocity.x = 0;
+                }
+                if(this.x <- this.width){
+                    // destroy old poles, so the game runs smoother overtime
+                    this.destroy();
+                    addNewPoles();
+                }
+            }
+            
+            function updateScore(){
+                scoreText.text = "Current score: "+score;
+            }
+            function getJumpForce(){
+                if(player.body.velocity.y == 0){
+                    powerbar = game.add.sprite(player.x, player.y-50, "powerbar");
+                    powerbar.width = 0;
+                    // add tween to make powerbar seem like it increases
+                    powerbarIncrease = game.add.tween(powerbar).to({
+                        width: 100},
+                        1000, "Linear", true);
+                    game.input.onDown.remove(getJumpForce, this);
+                    game.input.onUp.add(playerJump, this);
+                    }
+
+                }
+            function playerJump(){
+                // jumpForce was set to an odd powerbar.width*3-100 value after testing out with different values
+                jumpForce = -powerbar.width*3-100;
+                powerbar.destroy();
+                game.tweens.removeAll();
+                player.body.velocity.y = jumpForce * 2;
+                playerJumping = true;
+                powerbarIncrease.stop();
+                game.input.onUp.remove(playerJump, this);
+            }
+            function Pole(game, x, y){
+                // All new poles will inherit these
+                Phaser.Sprite.call(this, game, x, y, "pole");
+                game.physics.enable(this, Phaser.Physics.ARCADE);
+                this.body.immovable = true;
+                this.poleNumber = placedPoles;
+            };
+            
+            
+            function addNewPoles(){
+                var maxPolex = 0;
+                poleGroup.forEach(function(item){
+                    maxPolex = Math.max(item.x, maxPolex)
+                });
+                // next pole will be between min_gap and max_gap
+                var nextPolePosition = maxPolex + game.rnd.between(min_gap, max_gap);
+                addPole(nextPolePosition);
+            }
+            function addPole(x_position){
+                if (x_position < game.width * 2){
+                    placedPoles++;
+                    var pole = new Pole(game, x_position, game.rnd.between(250, 380));
+                    pole.anchor.set(0.5, 0);
+                    poleGroup.add(pole);
+                    var nextPolePosition = x_position + game.rnd.between(min_gap, max_gap);
+                    addPole(nextPolePosition);
+                }
+            }
+
+            function checkLanding(player, p_group){
+                if(player.body.touching.down){ 
+                    var check_border = player.x - p_group.x;
+                    // if the player if more than 20 pixles off of the center of the pole, the player will fall off
+                    if(Math.abs(check_border) > 20){
+                        player.body.velocity.x= check_border*2;
+                        player.body.velocity.y=-200;
+                    }
+                    var poleDiff = p_group.poleNumber-player.lastPole;
+                    if(poleDiff > 0){
+                        // increase score by 1
+                        score+= Math.pow(1, poleDiff);
+                        updateScore();
+                        player.lastPole = p_group.poleNumber;
+                    }
+                    if (playerJumping){
+                        playerJumping = false;
+                        game.input.onDown.add(getJumpForce, this);
+                    }
+                }
+                else {
+                    playerFallingDown = true;
+                    poleGroup.forEach(function(item) {
+				        item.body.velocity.x = 0;			
+			        });
+                }
+            }
+            
+            
+            function restartGame(){
+                score = 0;
+                bg_music.stop();
+                game.state.start(game.state.current);
+            } 
+
+            function endGame() {
+                restart = game.add.button(screenSize/2, 100, 'restart', restartGame, this);
+                restart.scale.y = 0.2;
+                restart.scale.x = 0.2;
+                var gameOver = game.add.text(275, 60, "Game Over!");
+                var gameOverScore = game.add.text(240, 80, "Your score was: " + score);
+
+            }
+            function playMusic(){ 
+                bg_music.play();
+                }
+
+            $(document).ready(function() {
+              $('#scorebutton').click(function() {
+                  var username = $("#ex1").val();
+                  var post_score = score;
+                  $.ajax({
+                    type: "POST",
+                    url: "addScore.php",
+                    data: {
+                      "username": username,
+                      "score": post_score
+                    },
+                    success: loadScores,
+                    dataType: "html"
+                    });
+             });
+        });
+            
+             
+                function loadScores() {
+                  $.getJSON("users.php", function(data) {
+                    var text="<ol>";
+                    var counter = 1;
+                    data.forEach(function(entry) {
+                        if (counter <= 10){
+                        text += "<li>" + entry.username + ": " + entry.score + "</li>";
+                        }
+                        counter+= 1;
+                    });
+                    text += "</ol>"
+                    document.getElementById("users").innerHTML = text;
+                  });
+                }
+           
+      </script>
+    </div>
+    <body>
+
+     <div id="users"></div>
+        <div class="col-xs-2">
+          <label for="ex1">Check the leaderboard!</label>
+          <input class="form-control" id="ex1" type="text" placeholder="Username">
+          <button type="button" id="scorebutton" class="btn btn-primary active">Submit score</button>
+        </div>
+    </body>
+    
+</html>
